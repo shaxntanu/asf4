@@ -151,6 +151,7 @@ static bool _mci_wait_busy(const void *const hw)
 static bool _mci_send_cmd_execute(const void *const hw, uint32_t cmdr, uint32_t cmd, uint32_t arg)
 {
 	uint32_t sr;
+	uint32_t cmd_timeout = 0x10000; // Bound the wait if hardware never raises CMDTEO.
 	ASSERT(hw);
 
 	cmdr |= SDHC_CR_CMDIDX(cmd) | SDHC_CR_CMDTYP_NORMAL;
@@ -196,7 +197,12 @@ static bool _mci_send_cmd_execute(const void *const hw, uint32_t cmdr, uint32_t 
 				return false;
 			}
 		}
-	} while (!hri_sdhc_get_NISTR_CMDC_bit(hw));
+	} while (!hri_sdhc_get_NISTR_CMDC_bit(hw) && --cmd_timeout);
+	if (!hri_sdhc_get_NISTR_CMDC_bit(hw)) {
+		_mci_reset(hw);
+		hri_sdhc_set_EISTR_reg(hw, SDHC_EISTR_MASK);
+		return false;
+	}
 	if (!(cmdr & SDHC_CR_DPSEL_DATA)) {
 		hri_sdhc_set_NISTR_CMDC_bit(hw);
 	}
